@@ -1,0 +1,28 @@
+version: '3'
+
+services:
+  centos7:
+    build:
+      context: .
+      dockerfile: Dockerfile.centos
+    image: ansible-centos7
+    container_name: centos7
+    ports:
+      - "2222:22"
+    networks:
+      - ansible_network
+
+  ubuntu:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu
+    image: ansible-ubuntu
+    container_name: ubuntu
+    ports:
+      - "2223:22"
+    networks:
+      - ansible_network
+
+networks:
+  ansible_network:
+    driver: bridge
