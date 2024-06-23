@@ -20,39 +20,40 @@
 10. Готовый playbook выложите в свой репозиторий, поставьте тег `08-ansible-02-playbook` на фиксирующий коммит, в ответ предоставьте ссылку на него.
 
 # Ответы
-Создал тестовый контейнер, и все работы производил в нём.
+Создал тестовый контейнер, и все работы производил на нём.
 
 Вывод команд из заданий 6-8 очень длинный поэтому приведу только самый конец.
 
-ansible-lint site.yml
+```ansible-lint site.yml```
 
 ![alt text](img/04.png)
 
-ansible-playbook -i inventory/prod.yml site.yml --check
+```ansible-playbook -i inventory/prod.yml site.yml --check```
 
 ![alt text](img/03.png)
 
 Падает на таске: Ensure clickhouse service is running.
 
-ansible-playbook -i inventory/prod.yml site.yml --diff
+```ansible-playbook -i inventory/prod.yml site.yml --diff```
 
 Всё выполняется без ошибок.
 
 ![alt text](img/01.png)
 
-ansible-playbook -i inventory/prod.yml site.yml --diff
+```ansible-playbook -i inventory/prod.yml site.yml --diff```
 
 ![alt text](img/02.png)
 
 Как видно есть 6 changed, а именно таски:
-    - Install clickhouse common static package
-    - Install clickhouse client package
-    - Install clickhouse server package
-    - Start clickhouse service
-    - Restart supervisord to apply new configuration
-    - Ensure vector service is running under supervisord
+- Install clickhouse common static package
+- Install clickhouse client package
+- Install clickhouse server package
+- Start clickhouse service
+- Restart supervisord to apply new configuration
+- Ensure vector service is running under supervisord
 
 Пример Readme в папке playbook.
+
 ---
 
 ### Как оформить решение задания
