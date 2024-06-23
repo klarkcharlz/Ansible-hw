@@ -1,0 +1,16 @@
+FROM centos/python-38-centos7
+USER root
+RUN yum -y update && \
+    yum -y install openssh-server sudo
+RUN ssh-keygen -A
+RUN useradd -m ansible && \
+    echo "ansible:ansible" | chpasswd && \
+    echo "ansible ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN mkdir /home/ansible/.ssh && \
+    chmod 700 /home/ansible/.ssh
+COPY id_ed25519.pub /home/ansible/.ssh/authorized_keys
+RUN chown ansible:ansible /home/ansible/.ssh/authorized_keys && \
+    chmod 600 /home/ansible/.ssh/authorized_keys
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D"]
