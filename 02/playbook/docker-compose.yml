@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  ubuntu:
+    build:
+      context: .
+    image: ansible-ubuntu
+    container_name: ubuntu
+    ports:
+      - "2223:22"
+    networks:
+      - ansible_network
+
+networks:
+  ansible_network:
+    driver: bridge

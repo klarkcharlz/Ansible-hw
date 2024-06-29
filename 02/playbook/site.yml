@@ -1,0 +1,182 @@
+- name: Install Clickhouse
+  hosts: clickhouse
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - block:
+        - name: Check if clickhouse client is already downloaded
+          stat:
+            path: "/tmp/clickhouse-client-{{ clickhouse_version }}.deb"
+          register: clickhouse_client_stat
+
+        - name: Check if clickhouse server is already downloaded
+          stat:
+            path: "/tmp/clickhouse-server-{{ clickhouse_version }}.deb"
+          register: clickhouse_server_stat
+
+        - name: Get clickhouse client distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/deb/pool/main/c/clickhouse-client/clickhouse-client_{{ clickhouse_version }}_all.deb"
+            dest: "/tmp/clickhouse-client-{{ clickhouse_version }}.deb"
+          when: not clickhouse_client_stat.stat.exists
+
+        - name: Get clickhouse server distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/deb/pool/main/c/clickhouse-server/clickhouse-server_{{ clickhouse_version }}_all.deb"
+            dest: "/tmp/clickhouse-server-{{ clickhouse_version }}.deb"
+          when: not clickhouse_server_stat.stat.exists
+
+        - name: Check if clickhouse common static is already downloaded
+          stat:
+            path: "/tmp/clickhouse-common-static-{{ clickhouse_version }}.deb"
+          register: clickhouse_common_static_stat
+
+        - name: Get clickhouse common static distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/deb/pool/main/c/clickhouse-common-static/clickhouse-common-static_{{ clickhouse_version }}_amd64.deb"
+            dest: "/tmp/clickhouse-common-static-{{ clickhouse_version }}.deb"
+          when: not clickhouse_common_static_stat.stat.exists
+
+      rescue:
+        - name: Get clickhouse common static distrib (rescue)
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/deb/pool/main/c/clickhouse-common-static/clickhouse-common-static_{{ clickhouse_version }}_amd64.deb"
+            dest: "/tmp/clickhouse-common-static-{{ clickhouse_version }}.deb"
+
+    - name: Check if clickhouse packages are downloaded
+      ansible.builtin.stat:
+        path: "/tmp/clickhouse-common-static-{{ clickhouse_version }}.deb"
+      register: clickhouse_common_static_check
+
+    - name: Debug clickhouse common static package
+      ansible.builtin.debug:
+        msg: "File exists: {{ clickhouse_common_static_check.stat.exists }}"
+
+    - name: Install clickhouse common static package
+      become: true
+      ansible.builtin.command:
+        cmd: "dpkg -i /tmp/clickhouse-common-static-{{ clickhouse_version }}.deb"
+      when: clickhouse_common_static_check.stat.exists
+
+    - name: Install clickhouse client package
+      become: true
+      ansible.builtin.command:
+        cmd: "dpkg -i /tmp/clickhouse-client-{{ clickhouse_version }}.deb"
+
+    - name: Install clickhouse server package
+      become: true
+      ansible.builtin.command:
+        cmd: "dpkg -i /tmp/clickhouse-server-{{ clickhouse_version }}.deb"
+      notify: Start clickhouse service
+
+    - name: Flush handlers
+      meta: flush_handlers
+
+    - name: Ensure clickhouse service is running
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: started
+        enabled: yes
+
+    - name: Wait for Clickhouse to be available
+      become: true
+      ansible.builtin.wait_for:
+        host: localhost
+        port: 9000
+        delay: 10
+        timeout: 300
+
+    - name: Create database
+      become: true
+      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc != 82
+      changed_when: create_db.rc == 0
+
+- name: Install and configure Vector
+  hosts: clickhouse
+  vars_files:
+    - group_vars/vector/vars.yml
+  tasks:
+    - name: Create vector installation directory
+      become: true
+      ansible.builtin.file:
+        path: "{{ vector_install_dir }}"
+        state: directory
+
+    - name: Check if vector is already downloaded
+      stat:
+        path: "/tmp/vector-{{ vector_version }}.tar.gz"
+      register: vector_download_stat
+
+    - name: Download vector
+      become: true
+      ansible.builtin.get_url:
+        url: "{{ vector_download_url }}"
+        dest: "/tmp/vector-{{ vector_version }}.tar.gz"
+      when: not vector_download_stat.stat.exists
+
+    - name: Check if vector is already extracted
+      stat:
+        path: "{{ vector_install_dir }}/vector-x86_64-unknown-linux-gnu"
+      register: vector_extract_stat
+
+    - name: Extract vector
+      become: true
+      ansible.builtin.unarchive:
+        src: "/tmp/vector-{{ vector_version }}.tar.gz"
+        dest: "{{ vector_install_dir }}"
+        remote_src: yes
+      when: not vector_extract_stat.stat.exists
+
+    - name: List contents of vector installation directory
+      become: true
+      ansible.builtin.shell: "ls -l {{ vector_install_dir }}"
+      register: vector_install_dir_contents
+      changed_when: false
+
+    - name: Debug vector installation directory contents
+      ansible.builtin.debug:
+        var: vector_install_dir_contents.stdout_lines
+
+    - name: List contents of vector subdirectory
+      become: true
+      ansible.builtin.shell: "ls -l {{ vector_install_dir }}/vector-x86_64-unknown-linux-gnu"
+      register: vector_subdir_contents
+      changed_when: false
+
+    - name: Debug vector subdirectory contents
+      ansible.builtin.debug:
+        var: vector_subdir_contents.stdout_lines
+
+    - name: Create vector configuration directory
+      become: true
+      ansible.builtin.file:
+        path: "{{ vector_config_dir }}"
+        state: directory
+
+    - name: Deploy vector configuration
+      become: true
+      ansible.builtin.template:
+        src: "templates/vector.toml.j2"
+        dest: "{{ vector_config_file }}"
+
+    - name: Create symlink for vector binary
+      become: true
+      ansible.builtin.file:
+        src: "{{ vector_install_dir }}/vector-x86_64-unknown-linux-gnu/bin/vector"
+        dest: "/usr/local/bin/vector"
+        state: link
+
+    - name: Restart supervisord to apply new configuration
+      become: true
+      ansible.builtin.command: supervisorctl reload
+
+    - name: Ensure vector service is running under supervisord
+      become: true
+      ansible.builtin.command: supervisorctl start vector

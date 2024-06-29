@@ -1,1 +1,2 @@
-01/id_ed25519.pub
+*.pub
+.idea/
