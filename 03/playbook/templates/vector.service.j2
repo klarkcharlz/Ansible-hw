@@ -1,0 +1,10 @@
+[Unit]
+Description=Vector
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/vector --config-toml {{ vector_config_file }}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
